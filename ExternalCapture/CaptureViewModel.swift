@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Foundation
+import UIKit
 import Observation
 
 @Observable
@@ -18,12 +19,14 @@ class CaptureViewModel {
     var availableAudioInputs: [AVCaptureDevice] = []
 
     var isCapturing = false
-    var captureSession: AVCaptureSession? = nil
+    var captureSession: AVCaptureSession?
 
-    var activeVideoDevice: AVCaptureDevice? = nil
-    var activeAudioDevice: AVCaptureDevice? = nil
+    var activeVideoDevice: AVCaptureDevice?
+    var activeAudioDevice: AVCaptureDevice?
 
-    private var audioPreviewOutput: AudioPlaybackOutput? = nil
+    private var lastConnectedDeviceName: String?
+
+    private var audioPreviewOutput: AudioPlaybackOutput?
 
     private var notificationObservations: [NSObjectProtocol] = []
 
@@ -87,6 +90,7 @@ class CaptureViewModel {
 
     private func handleDeviceConnected() {
         updateInputDevices()
+        autoReconnectIfPossible()
     }
 
     private func handleDeviceDisconnected(_ notification: Notification) {
@@ -128,6 +132,14 @@ class CaptureViewModel {
         availableAudioInputs = audioSession.devices.sorted(by: { $0.localizedName < $1.localizedName })
     }
 
+    private func autoReconnectIfPossible() {
+        /// Auto reconnect if we have connected it in the past.
+        if let lastConnectedDeviceName,
+           let videoDevice = availableVideoInputs.first(where: { $0.localizedName == lastConnectedDeviceName}) {
+            startCapture(videoDevice: videoDevice)
+        }
+    }
+
     func startCapture(videoDevice: AVCaptureDevice) {
         guard hasVideoAccess, !isCapturing, captureSession == nil else {
             return
@@ -135,6 +147,8 @@ class CaptureViewModel {
 
         isCapturing = true
         configureInput(videoDevice: videoDevice)
+
+        lastConnectedDeviceName = videoDevice.localizedName
     }
 
     func updateAudioDeviceSelection(audioDevice: AVCaptureDevice) {
@@ -156,6 +170,7 @@ class CaptureViewModel {
             activeVideoDevice.activeFormat = videoFormat
             activeVideoDevice.unlockForConfiguration()
             _$observationRegistrar.willSet(self, keyPath: \.activeVideoDevice)
+            _$observationRegistrar.didSet(self, keyPath: \.activeVideoDevice)
         } catch {
             NSLog("Failed to update device, error: \(error)")
         }
@@ -168,6 +183,7 @@ class CaptureViewModel {
 
         captureSession?.sessionPreset = preset
         _$observationRegistrar.willSet(self, keyPath: \.captureSession)
+        _$observationRegistrar.didSet(self, keyPath: \.captureSession)
     }
 
     private func configureInput(videoDevice: AVCaptureDevice, audioDevice: AVCaptureDevice? = nil) {
@@ -179,6 +195,10 @@ class CaptureViewModel {
 
         let captureSession = AVCaptureSession()
         activeVideoDevice = videoDevice
+
+        if captureSession.isMultitaskingCameraAccessSupported {
+            captureSession.isMultitaskingCameraAccessEnabled = true
+        }
 
         do {
             try videoDevice.lockForConfiguration()
@@ -237,6 +257,7 @@ class CaptureViewModel {
 
             DispatchQueue.main.async {
                 self.captureSession = captureSession
+                UIApplication.shared.isIdleTimerDisabled = true
             }
         }
     }
@@ -248,6 +269,8 @@ class CaptureViewModel {
         self.captureSession?.stopRunning()
         self.captureSession = nil
         self.isCapturing = false
+
+        UIApplication.shared.isIdleTimerDisabled = true
     }
 }
 

@@ -32,25 +32,44 @@ struct CameraPreviewView: UIViewRepresentable {
 
 class CameraPreviewInternalView: UIView {
 
-    override class var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
-    }
-
-    var previewLayer: AVCaptureVideoPreviewLayer {
-        layer as! AVCaptureVideoPreviewLayer
-    }
-
+    var previewLayer: AVCaptureVideoPreviewLayer?
     var session: AVCaptureSession? {
-        get { previewLayer.session }
+        get { previewLayer?.session }
         set {
-            guard previewLayer.session !== newValue else {
+            guard previewLayer?.session !== newValue else {
                 return
             }
 
-            previewLayer.session = newValue
-            previewLayer.connection?.automaticallyAdjustsVideoMirroring = false
-            previewLayer.connection?.isVideoMirrored = false
-            previewLayer.connection?.videoRotationAngle = 0
+            setupLayer()
+            previewLayer?.session = newValue
+            previewLayer?.connection?.automaticallyAdjustsVideoMirroring = false
+            previewLayer?.connection?.isVideoMirrored = false
+            previewLayer?.connection?.videoRotationAngle = 0
         }
+    }
+
+    init() {
+        super.init(frame: .zero)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupLayer() {
+        if previewLayer != nil {
+            previewLayer?.removeFromSuperlayer()
+        }
+
+        let previewLayer = AVCaptureVideoPreviewLayer()
+        self.previewLayer = previewLayer
+        
+        self.layer.addSublayer(previewLayer)
+        previewLayer.frame = self.bounds
+    }
+
+    override func layoutSublayers(of layer: CALayer) {
+        super.layoutSublayers(of: layer)
+        previewLayer?.frame = self.bounds
     }
 }
